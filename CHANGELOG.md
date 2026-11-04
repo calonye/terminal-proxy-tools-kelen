@@ -4,6 +4,10 @@
 - 当前记录至：`v4.2.0`
 - 最后更新：`2026-11-04`
 
+## 未发布
+
+- 文档：README 改为中英双语（先完整中文、后完整英文），新增徽标、语言切换与快速入口
+
 ## v4.2.0
 
 - 新增：`proxy_on` 后，当前终端直接执行 `sudo apt ...` / `sudo apt-get ...` 也会走代理（自动为 sudo 保留 `http_proxy / https_proxy / no_proxy`）；`proxy_off` 时撤销
