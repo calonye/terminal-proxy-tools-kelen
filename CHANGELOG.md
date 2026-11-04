@@ -1,8 +1,18 @@
 # Changelog
 
 - 文档类型：版本日志
-- 当前记录至：`v4.1.0`
-- 最后更新：`2026-04-16`
+- 当前记录至：`v4.2.0`
+- 最后更新：`2026-11-04`
+
+## v4.2.0
+
+- 新增：`proxy_on` 后，当前终端直接执行 `sudo apt ...` / `sudo apt-get ...` 也会走代理（自动为 sudo 保留 `http_proxy / https_proxy / no_proxy`）；`proxy_off` 时撤销
+- 仅作用于当前 Shell，不修改系统 APT 配置或 sudoers；已有 `sudo` 别名或函数时不覆盖，只给出提示
+- 代理变量在开启期间被清除时，`sudo apt` / `sudo apt-get` 会停止执行并提示，避免误走直连
+- `proxy_status` 新增 APT 代理传递状态
+- 修复：执行 `proxy_off` 后再执行 `proxy_on`，`NO_PROXY` 绕过列表变为空
+- 文档：README 改为面向使用者的入口说明，补充 Release 下载与升级时保留配置的提示
+- 发布：GitHub Release 提供 `.tar.gz` / `.zip` 压缩包与 `SHA256SUMS`；后续版本由 Git 标签留存，不再新增 `history/版本快照/` 文件
 
 ## v4.1.0
 
