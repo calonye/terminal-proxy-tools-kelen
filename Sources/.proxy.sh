@@ -1,11 +1,12 @@
  
  
-# ==================== 全功能终端代理配置 (v4.1.0 by Kelen+Gemini) - 开始 ====================
+# ==================== 全功能终端代理配置 (v4.2.0 by Kelen+Gemini) - 开始 ====================
 #
 # @description: 一个强大、安全且注释详尽的终端代理管理脚本。
+#               v4.2.0 新增当前终端的 `sudo apt` / `sudo apt-get` 代理变量传递，并修复 proxy_off 后 NO_PROXY 绕过列表丢失。
 #               v4.1.0 在 v4.0.0 的基础上继续加固：补充依赖探测、分层状态输出和 Git/SSH 写入失败提示。
 # @author:      Kelen+Gemini
-# @version:     4.1.0 (稳健性增强版)
+# @version:     4.2.0 (APT 代理传递版)
 #
 # --- 使用方法 ---
 #
@@ -34,7 +35,7 @@
 #
 # --- 命令列表 ---
 #
-#   proxy_on     - 开启所有代理 (包括自动配置 SSH)
+#   proxy_on     - 开启所有代理 (包括自动配置 SSH，及当前终端的 sudo apt/apt-get 代理传递)
 #   proxy_off    - 关闭所有代理 (包括自动清理 SSH 配置)
 #   proxy_status - 查看当前所有代理的状态
 #
@@ -151,7 +152,7 @@ function _proxy_join_csv() {
 }
 
 function _proxy_no_proxy_entries() {
-    _proxy_split_csv_to_lines "$NO_PROXY" | sed '/^$/d'
+    _proxy_split_csv_to_lines "${NO_PROXY-${_PROXY_NO_PROXY_CONFIG-}}" | sed '/^$/d'
 }
 
 function _proxy_is_ipv4() {
@@ -322,6 +323,70 @@ function _proxy_status_flag() {
     fi
 }
  
+# 函数: _proxy_apt_sudo_is_ours
+# 目的: 判断当前 sudo 函数是否仍是本脚本安装的包装，避免误删用户自定义。
+function _proxy_apt_sudo_is_ours() {
+    [ -n "${_PROXY_APT_WRAPPER_BODY:-}" ] &&
+        [ "$(typeset -f sudo 2>/dev/null)" = "$_PROXY_APT_WRAPPER_BODY" ]
+}
+
+# 函数: _proxy_apt_sudo_enable
+# 目的: 仅在当前 Shell 安装 sudo 包装，使 `sudo apt` / `sudo apt-get` 保留代理变量。
+# 返回: 0 已启用；1 未启用（冲突或缺少 sudo）；2 未检测到 APT，无需启用。
+function _proxy_apt_sudo_enable() {
+    if ! _proxy_has_command apt && ! _proxy_has_command apt-get; then
+        return 2
+    fi
+    if ! _proxy_has_command sudo; then
+        echo -e "  \033[33m[!]\033[0m 未检测到 \`sudo\`，已跳过 APT 代理传递。"
+        return 1
+    fi
+    if [ "${_PROXY_APT_WRAPPER_ACTIVE:-0}" = 1 ]; then
+        if ! alias sudo >/dev/null 2>&1 && _proxy_apt_sudo_is_ours; then
+            return 0
+        fi
+        echo -e "  \033[33m[!]\033[0m \`sudo\` 包装已被修改或被别名遮蔽，未重新安装。"
+        return 1
+    fi
+    if alias sudo >/dev/null 2>&1 || typeset -f sudo >/dev/null 2>&1; then
+        echo -e "  \033[33m[!]\033[0m 检测到已有 \`sudo\` 别名或函数，未覆盖；如需启用，请先移除后重新执行 proxy_on。"
+        return 1
+    fi
+
+    function sudo() {
+        case "${1-}" in
+            apt|apt-get)
+                # APT 的 HTTPS 源在未设置 https_proxy 时会回退使用 http_proxy。
+                if [ -z "${http_proxy:-}" ]; then
+                    echo "代理变量已缺失，为避免 APT 绕过代理直连，已停止执行；请重新执行 proxy_on，或执行 proxy_off 后直连。" >&2
+                    return 1
+                fi
+                builtin command sudo --preserve-env=http_proxy,https_proxy,no_proxy "$@"
+                ;;
+            *) builtin command sudo "$@" ;;
+        esac
+    }
+    _PROXY_APT_WRAPPER_BODY="$(typeset -f sudo)"
+    _PROXY_APT_WRAPPER_ACTIVE=1
+}
+
+# 函数: _proxy_apt_sudo_disable
+# 目的: 只移除本脚本安装且未被改动的 sudo 包装。
+function _proxy_apt_sudo_disable() {
+    [ "${_PROXY_APT_WRAPPER_ACTIVE:-0}" = 1 ] || return 0
+    if ! _proxy_apt_sudo_is_ours; then
+        unset _PROXY_APT_WRAPPER_ACTIVE _PROXY_APT_WRAPPER_BODY
+        echo -e "  \033[33m[!]\033[0m \`sudo\` 函数已被修改，已保留现有定义。"
+        return 1
+    fi
+    if ! unset -f sudo; then
+        echo -e "  \033[31m[x]\033[0m 无法移除 \`sudo\` 包装，请检查当前 Shell。"
+        return 1
+    fi
+    unset _PROXY_APT_WRAPPER_ACTIVE _PROXY_APT_WRAPPER_BODY
+    echo -e "  \033[33m[✓]\033[0m 已移除 sudo apt/apt-get 代理传递"
+}
+
 # 函数: _proxy_ssh_on
 # 目的: 安全地在 `~/.ssh/config` 文件中开启 SSH 代理。
 function _proxy_ssh_on() {
@@ -389,6 +454,7 @@ function _proxy_ssh_off() {
 # 目的: 一键开启所有受支持的代理配置，为用户提供一个“准备就绪”的网络环境。
 function proxy_on() {
     local effective_no_proxy
+    local apt_sudo_rc=0
 
     echo -e "\033[1m开启所有终端代理...\033[0m"
  
@@ -424,6 +490,14 @@ function proxy_on() {
     export NO_PROXY="${effective_no_proxy}"
     echo -e "  \033[32m[✓]\033[0m 已配置环境变量 (影响 curl, wget, apt, pip, bun, pnpm 等大多数工具)"
     echo -e "  \033[34m[i]\033[0m 当前 NO_PROXY: ${effective_no_proxy}"
+
+    # --- 步骤 1.1: 让当前终端的 sudo apt / apt-get 保留代理变量 ---
+    # sudo 默认会重置环境变量；此包装只作用于当前 Shell，不修改系统 APT 或 sudoers 配置。
+    _proxy_apt_sudo_enable || apt_sudo_rc=$?
+    case "$apt_sudo_rc" in
+        0) echo -e "  \033[32m[✓]\033[0m 已配置 sudo apt/apt-get 代理传递 (仅当前终端)" ;;
+        2) echo -e "  \033[34m[i]\033[0m 未检测到 \`apt\` / \`apt-get\`，已跳过 APT 代理传递。" ;;
+    esac
  
     # --- 步骤 2: 配置 Git 专属代理 ---
     # Git 有自己独立的配置系统。通过 `git config` 设置是更明确、更可靠的方式。
@@ -452,6 +526,11 @@ function proxy_on() {
 # 目的: 一键关闭所有由本脚本开启的代理配置，将网络环境恢复到原始状态。
 function proxy_off() {
     echo -e "\033[1m关闭所有终端代理...\033[0m"
+    # 保留配置区的绕过列表，供下次 proxy_on 使用；变量本身随后仍会被 unset。
+    if [ "${NO_PROXY+x}" = x ]; then
+        _PROXY_NO_PROXY_CONFIG="$NO_PROXY"
+    fi
+    _proxy_apt_sudo_disable
     # `unset` 命令会从当前 Shell 环境中彻底移除这些变量（大小写版本一并移除）。
     unset http_proxy https_proxy all_proxy no_proxy
     unset HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY
@@ -494,6 +573,15 @@ function proxy_status() {
         echo -e "环境变量: \033[33m关闭\033[0m"
     fi
     echo "  NO_PROXY: ${effective_no_proxy}"
+    if [ "${_PROXY_APT_WRAPPER_ACTIVE:-0}" = 1 ] &&
+        ! alias sudo >/dev/null 2>&1 && _proxy_apt_sudo_is_ours &&
+        [ -n "${http_proxy:-}" ]; then
+        echo -e "APT 代理传递: \033[32m开启\033[0m (仅当前终端的 sudo apt/apt-get)"
+    elif [ "${_PROXY_APT_WRAPPER_ACTIVE:-0}" = 1 ]; then
+        echo -e "APT 代理传递: \033[31m异常\033[0m (sudo 包装或代理变量已变化)"
+    else
+        echo -e "APT 代理传递: \033[33m关闭\033[0m"
+    fi
     if [ "$git_dep_status" -eq 0 ]; then
         git_proxy=$(git config --global --get http.proxy 2>/dev/null)
     else
@@ -517,5 +605,5 @@ function proxy_status() {
     echo "--------------------"
 }
 
-# ===================== 全功能终端代理配置 (v4.1.0 by Kelen+Gemini) - 结束 =====================
+# ===================== 全功能终端代理配置 (v4.2.0 by Kelen+Gemini) - 结束 =====================
  

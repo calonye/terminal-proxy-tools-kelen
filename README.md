@@ -1,66 +1,65 @@
 # Terminal_Proxy_Tools_Kelen
 
-这个仓库只承载可发布的终端代理脚本本体与版本资产，不包含工作空间级的需求、设计研发文档。
+一份面向 `bash` 和 `zsh` 的终端代理管理脚本，用来统一管理 Shell 环境变量、Git 代理和 SSH 代理，支持局域网绕过，并让 Ubuntu / Debian 上的 `sudo apt` 也能走代理。
 
-- 文档类型：仓库入口文档
-- 当前版本：`v4.1.0`
-- 最后更新：`2026-04-16`
+- 当前版本：`v4.2.0`
+- 最后更新：`2026-11-04`
 
-## 快速判断
+## 为什么用它
 
-- 想一键开关终端代理 → 用它
-- 想让内网 HTTP 和 SSH 同时绕过代理 → 用它
-- 想保留脚本快照、版本日志和源码资产分层 → 这个仓库已经按这个方向整理
+- 不想分别手改 Shell、Git、SSH 的代理配置
+- 需要一键开启、关闭并检查当前代理状态
+- 需要让局域网目标直连，避免 HTTP 能直连但 SSH 仍误走代理
 
-## 项目定位
+## 功能
 
-- 目标：提供一份可直接 `source` 的终端代理脚本
-- 仓库源码入口：[`Sources/.proxy.sh`](./Sources/.proxy.sh)
-- 推荐安装后入口：`~/.proxy.sh`
-- 当前主线版本：`v4.1.0`
-- 源码目录：[`Sources/`](./Sources/)
-- 历史版本快照目录：[`history/版本快照/`](./history/版本快照/)
-- 版本日志：[`CHANGELOG.md`](./CHANGELOG.md)
-
-## 当前能力
-
-- 一键开启和关闭终端代理：`proxy_on / proxy_off`
-- 查看当前环境、Git、SSH 代理状态：`proxy_status`
-- 自动写入和清理 Git 全局代理
-- 自动写入和清理 `~/.ssh/config` 中由脚本托管的代理区块
+- `proxy_on / proxy_off / proxy_status`
+- 同步管理 `http_proxy / https_proxy / all_proxy`
+- 同步写入和清理 Git 全局代理
+- 同步写入和清理 `~/.ssh/config` 中由脚本托管的代理区块
 - 支持多本地局域网绕过
-- 启用前探测 `git` / `nc` 依赖，避免误报成功
-- 分层输出环境变量、Git、SSH 当前状态
-- 同时兼容 `bash` 与 `zsh`
-
-## 仓库结构
-
-```text
-.
-├── .gitignore
-├── CHANGELOG.md
-├── LICENSE
-├── README.md
-├── Sources/
-│   └── .proxy.sh
-└── history/
-    └── 版本快照/
-        ├── .proxy.v3.8.0.sh
-        ├── .proxy.v4.0.0.sh
-        └── .proxy.v4.1.0.sh
-```
+- 当前终端的 `sudo apt` / `sudo apt-get` 自动保留代理变量
+- 启用前探测 `git` 与 `nc`
+- 分层显示环境变量、Git、SSH、APT 代理传递的当前状态
 
 ## 快速开始
 
-推荐方式：复制脚本到家目录
+任选一种方式获取脚本。
+
+**从 Release 下载**（无需克隆仓库）：
 
 ```sh
-cp /绝对路径/仓库根目录/Sources/.proxy.sh ~/.proxy.sh
+ver=v4.2.0
+curl -LO "https://github.com/calonye/terminal-proxy-tools-kelen/releases/download/${ver}/terminal-proxy-tools-kelen-${ver}.tar.gz"
+tar -xzf "terminal-proxy-tools-kelen-${ver}.tar.gz"
+cp "terminal-proxy-tools-kelen-${ver}/Sources/.proxy.sh" ~/.proxy.sh
+```
+
+Release 页面同时提供 `.zip` 压缩包和 `SHA256SUMS` 校验文件。
+
+**或者，在仓库根目录执行：**
+
+```sh
+cp ./Sources/.proxy.sh ~/.proxy.sh
+```
+
+> 升级提示：如果 `~/.proxy.sh` 已存在，复制会覆盖你在顶部配置区填写的代理地址和端口。请先备份（如 `cp ~/.proxy.sh ~/.proxy.sh.bak`），复制后再把配置区改回原值。
+
+如果你使用 `zsh`：
+
+```sh
 echo 'source ~/.proxy.sh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-加载后可直接使用：
+如果你使用 `bash`：
+
+```sh
+echo 'source ~/.proxy.sh' >> ~/.bashrc
+source ~/.bashrc
+```
+
+加载后即可使用：
 
 ```sh
 proxy_on
@@ -68,9 +67,9 @@ proxy_status
 proxy_off
 ```
 
-## 配置项
+## 配置
 
-推荐安装后，请在 `~/.proxy.sh` 顶部维护配置；仓库源码对应文件为 [`Sources/.proxy.sh`](./Sources/.proxy.sh)。当前主要维护这几项：
+安装后直接修改 `~/.proxy.sh` 顶部配置区，通常只需要关注：
 
 - `PROXY_HOST`
 - `PROXY_HTTP_PORT`
@@ -78,9 +77,9 @@ proxy_off
 - `NO_PROXY`
 - `SSH_BYPASS_EXTRA_PATTERNS`
 
-### `NO_PROXY`
+### NO_PROXY
 
-用于控制环境变量层的绕过目标，默认已经包含：
+用于控制环境变量层的绕过目标，默认值包含常见本机与私网范围：
 
 ```sh
 NO_PROXY="localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.local"
@@ -93,9 +92,9 @@ NO_PROXY="localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.local
 - 局域网域名
 - 本地域名后缀
 
-### `SSH_BYPASS_EXTRA_PATTERNS`
+### SSH_BYPASS_EXTRA_PATTERNS
 
-用于控制 SSH 层的额外直连目标。因为 SSH `Host` 规则不支持 CIDR，所以更细粒度的网段或局域网主机建议在这里补充：
+用于补充 SSH 层的直连目标。因为 SSH `Host` 规则不支持 CIDR，更细粒度的局域网主机或模式建议写在这里：
 
 ```sh
 SSH_BYPASS_EXTRA_PATTERNS=(
@@ -105,7 +104,7 @@ SSH_BYPASS_EXTRA_PATTERNS=(
 )
 ```
 
-## 工作方式
+## 它会改什么
 
 执行 `proxy_on` 后，脚本会同时处理三层：
 
@@ -113,53 +112,46 @@ SSH_BYPASS_EXTRA_PATTERNS=(
 - Git 全局 `http.proxy / https.proxy`
 - `~/.ssh/config` 中由脚本托管的 SSH 代理区块
 
-执行 `proxy_off` 后，会反向清理这三层配置，并保留 `~/.ssh/config.bak` 备份。
+在装有 `apt` / `apt-get` 的系统上，还会为**当前终端**启用 `sudo apt` 代理传递（见下节）。
 
-## 环境前提
+执行 `proxy_off` 后，会反向清理这些配置，并保留 `~/.ssh/config.bak` 备份。
 
-- 建议本机已安装 `git`，否则脚本会跳过 Git 代理写入与清理
-- 若需要 SSH 代理，请确保系统存在 `nc`（netcat），否则脚本会跳过 SSH 代理区块写入
-- `proxy_status` 会直接显示这两个依赖是否可用
+## 在 Ubuntu / Debian 上使用 `sudo apt`
 
-## v4.1.0 重点
+`sudo` 默认会清除代理环境变量，所以以前即使执行了 `proxy_on`，`sudo apt-get install ...` 仍会直连。从 `v4.2.0` 起，开启代理后可以直接输入：
 
-`v4.1.0` 在 `v4.0.0` 的基础上补了三件事：
+```sh
+proxy_on
+sudo apt-get update
+sudo apt-get install -y <软件包>
+```
 
-- 启用前探测 `git` 与 `nc`
-- Git / SSH 写入失败时不再误报成功
-- `proxy_status` 改成更明确的分层状态输出
+脚本会在当前终端安装一个 `sudo` 包装：只有以 `apt` / `apt-get` 开头的命令会额外带上 `--preserve-env=http_proxy,https_proxy,no_proxy`，其他 `sudo` 命令原样执行。`proxy_off` 时撤销该包装。
 
-## v4.0.0 重点
+使用边界：
 
-`v4.0.0` 的核心不是单纯把 `NO_PROXY` 变长，而是把“局域网绕过”同时落实到：
+- 只作用于执行过 `proxy_on` 的当前终端；新开的终端、脚本中的 `sudo` 不受影响。
+- 只识别 `sudo apt ...` 与 `sudo apt-get ...`；`sudo -n apt-get`、`sudo /usr/bin/apt-get` 等写法按原样执行，不会自动带代理。
+- 如果你已经定义了 `sudo` 别名或函数（例如 `alias sudo='sudo '`），脚本不会覆盖，只会提示；`proxy_status` 会显示为关闭。
+- 若系统的 sudo 策略不允许保留环境变量，`sudo` 会直接报错，不会自动退回直连。
+- 系统 APT 配置中已有的代理（如 `/etc/apt/apt.conf.d/` 中的 `Acquire::http::Proxy`）优先于环境变量。可用 `apt-config dump | grep -i proxy` 查看。
+- APT 对 `no_proxy` 只做主机名后缀匹配，不认识 `192.168.0.0/16` 这类 CIDR；内网软件源请写具体主机名或 IP。
+- 系统级软件商店、容器镜像拉取等由后台服务下载的工具，不读取终端环境变量，需要按其自身方式配置代理。
 
-- 环境变量层
-- SSH 层
+## 环境要求
 
-这样可以避免：
+- `bash` 或 `zsh`
+- `git`：用于写入和清理 Git 全局代理
+- `nc`（netcat）：用于 SSH 代理转发
+- `sudo` 与 `apt` / `apt-get`（可选）：用于 APT 代理传递；`sudo` 需支持 `--preserve-env=变量列表`
 
-- `curl 192.168.x.x` 直连
-- 但 `ssh 192.168.x.x` 仍然走代理
+如果缺少 `git` 或 `nc`，脚本会跳过对应层，并在状态输出中明确提示；未安装 `apt` / `apt-get` 时跳过 APT 代理传递。
 
-这种只修一半的情况。
+## 版本与发布
 
-## 版本资产边界
+- 版本变更见 [`CHANGELOG.md`](./CHANGELOG.md)
+- 当前脚本源码位于 [`Sources/.proxy.sh`](./Sources/.proxy.sh)
 
-- `README.md`：项目入口、使用方式、结构导航
-- `CHANGELOG.md`：版本日志
-- `LICENSE`：仓库许可说明
-- `Sources/`：当前主线源码目录
-- `history/`：历史版本快照与归档资产目录
-- `.gitignore`：仓库运行残留与系统垃圾文件过滤
+## 许可证
 
-这六类资产分开维护，不交叉替代。
-
-## 上传边界
-
-- 只上传项目本体文件，不上传系统垃圾文件、编辑器临时文件、备份残留
-- 历史版本快照统一归档到 `history/`，不再与当前主线源码并列混放
-- 需求与设计研发文档在工作空间层管理，不纳入本仓库
-
-## 许可
-
-本项目采用 `MIT` 许可证发布。保留版权声明，允许免费使用、修改、分发与商用，具体条款见 [LICENSE](./LICENSE)。
+本项目采用 [MIT License](./LICENSE)。
